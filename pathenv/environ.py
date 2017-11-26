@@ -79,46 +79,45 @@ class PathFindingByPixelWithDistanceMapEnv(gym.Env):
     def _reset(self):
         self.steps = 0.
         self.cur_task = self.task_set[self.task_ids[self.cur_task_i]]
+        self.local_map = self.cur_task.local_map.transpose()
         self.cur_task_i += 1
         if self.cur_task_i >= len(self.task_ids):
             self.cur_task_i = 0
 
         rand = random.Random()
         if self.cur_task is not None:
-            local_map = self.cur_task.local_map  # shortcut
+            local_map = self.local_map  # shortcut
             while True:
-                self.start = (rand.randint(0, self.cur_task.local_map.shape[0] - 1),
-                              rand.randint(0, self.cur_task.local_map.shape[1] - 1))
-                self.finish = (rand.randint(0, self.cur_task.local_map.shape[0] - 1),
-                               rand.randint(0, self.cur_task.local_map.shape[1] - 1))
-                cstart = (self.start[1], self.start[0])
-                cfinish = (self.finish[1], self.finish[0])
-                if local_map[cstart] == 0 \
-                        and local_map[cfinish] == 0 \
-                        and cstart != cfinish \
+                self.start = (rand.randint(0, self.local_map.shape[0] - 1),
+                              rand.randint(0, self.local_map.shape[1] - 1))
+                self.finish = (rand.randint(0, self.local_map.shape[0] - 1),
+                               rand.randint(0, self.local_map.shape[1] - 1))
+                if local_map[self.start] == 0 \
+                        and local_map[self.finish] == 0 \
+                        and self.start != self.finish \
                         and check_finish_achievable(numpy.array(local_map, dtype=numpy.float),
-                                                    numpy.array(cstart, dtype=numpy.int),
-                                                    numpy.array(cfinish, dtype=numpy.int)):
+                                                    numpy.array(self.start, dtype=numpy.int),
+                                                    numpy.array(self.finish, dtype=numpy.int)):
                     break
 
         return self._init_state()
 
     def _init_state(self):
-        local_map = numpy.array(self.cur_task.local_map, dtype=numpy.float)
+        local_map = numpy.array(self.local_map, dtype=numpy.float)
         self.distance_map = build_distance_map(local_map,
                                                numpy.array(self.finish, dtype=numpy.int))
 
-        m = self.cur_task.local_map
+        m = self.local_map
         self.obstacle_points_for_vis = [(x, y)
                                         for y in xrange(m.shape[0])
                                         for x in xrange(m.shape[1])
-                                        if m[y, x] > 0]
+                                        if m[x, y] > 0]
         self.cur_episode_state_id_seq = [tuple(self.start)]
         self.cur_position_discrete = self.start
         return self._get_state()
 
     def _get_base_state(self, cur_position_discrete):
-        return get_flat_state(self.cur_task.local_map,
+        return get_flat_state(self.local_map,
                               tuple(cur_position_discrete),
                               self.vision_range,
                               self.done_reward,
@@ -147,7 +146,7 @@ class PathFindingByPixelWithDistanceMapEnv(gym.Env):
         if done:
             reward = self.done_reward
         else:
-            goes_out_of_field = any(new_position < 0) or any(new_position + 1 > self.cur_task.local_map.shape)
+            goes_out_of_field = any(new_position < 0) or any(new_position + 1 > self.local_map.shape)
             invalid_step = goes_out_of_field or tuple(new_position) in self.obstacle_points_for_vis
             if invalid_step:
                 '''
@@ -155,8 +154,8 @@ class PathFindingByPixelWithDistanceMapEnv(gym.Env):
                 print(tuple(self.cur_position_discrete))
                 print(new_position)
                 print(any(new_position < 0))
-                print(any(new_position + 1 > self.cur_task.local_map.shape))
-                print(self.cur_task.local_map[tuple(new_position)] > 0)
+                print(any(new_position + 1 > self.local_map.shape))
+                print(self.local_map[tuple(new_position)] > 0)
                 '''
                 reward = -self.obstacle_punishment
             else:
@@ -165,8 +164,8 @@ class PathFindingByPixelWithDistanceMapEnv(gym.Env):
                 print(tuple(self.cur_position_discrete))
                 print(new_position)
                 print(any(new_position < 0))
-                print(any(new_position + 1 > self.cur_task.local_map.shape))
-                print(self.cur_task.local_map[tuple(new_position)] > 0)
+                print(any(new_position + 1 > self.local_map.shape))
+                print(self.local_map[tuple(new_position)] > 0)
                 '''
                 local_target = self.finish
                 cur_target_dist = dist_metric(new_position, local_target)
@@ -211,7 +210,7 @@ class PathFindingByPixelWithDistanceMapEnv(gym.Env):
         screen_height = 400
 
         #object const
-        m = self.cur_task.local_map
+        m = self.local_map
         cwidth = screen_width / m.shape[1]
         cheight = screen_height / m.shape[0]
         csize = min(cwidth, cheight) #cell size
@@ -281,4 +280,4 @@ class PathFindingByPixelWithDistanceMapEnv(gym.Env):
     
     
     def show_map(self):
-        print(self.cur_task.local_map)
+        print(self.local_map)

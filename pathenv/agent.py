@@ -65,7 +65,7 @@ class FoxAgent(BaseAgent):
         action = -1
         loopflag = (len(self.memory) == 0 or len(self.memory[-1]) == 0
                 or self.memory[-1][-1].reward > - 10)
-        print(loopflag)
+        # print(loopflag)
         while True:
             if (action == 0):
                 observation[0,:ci,cj] = 0
@@ -85,7 +85,7 @@ class FoxAgent(BaseAgent):
                 observation[0,:ci,:cj] = 0
             else:
                 observation[0,ci,cj] = 0
-            print(observation)
+            # print(observation)
             hot = numpy.argmax(observation)
             (hoti, hotj) = divmod(hot, observation.shape[2])
             if (hoti == ci):
@@ -96,15 +96,56 @@ class FoxAgent(BaseAgent):
                 action = 7 if hotj < cj else 1
             else:
                 action = 5 if hotj < cj else 3
-            print(action)
+            # print(action)
             if loopflag or action != self.memory[-1][-1].action:
                 return action    
             
-class QAgent(BaseAgent):
+class QAgent(BaseAgent):    
+    def _build_model(self):
+        self.table = dict()
+        self.learning_factor = 0.9
+        self.discount_factor = 0.9
+        self.dejavu_threshold = 20
+       
     def train_on_memory(self):
-        pass
+        for observation, action, reward, next_observation, done in reversed(self.memory[-1]):
+            # Do it in a service loop
+            # bins = np.arange(-1, np.max(observation) + self.splitter, self.splitter)
+            # digO = bins[numpy.digitize(observation, bins) // 2 * 2]
+            # bins = np.arange(-1, np.max(next_observation) + self.splitter, self.splitter)
+            # digNO = bins[numpy.digitize(next_observation, bins) // 2 * 2]
+            
+            digO = tuple(map(tuple, observation[0,:,:]))
+            digNO = tuple(map(tuple, next_observation[0,:,:]))
+            if digO not in self.table:
+                self.table[digO] = numpy.zeros(self.number_of_actions)
+            if digNO in self.table:
+                self.table[digO][action] += self.learning_factor * (reward
+                                                              - self.table[digO][action] +
+                                       self.discount_factor * numpy.max(self.table[digNO]))
+            else:
+                self.table[digO][action] += self.learning_factor * (reward
+                                                              - self.table[digO][action])
+    def find_cycle(self, digO):
+        shift = 0
+        if len(self.memory[-1]) < 3:
+            return False
+        if (digO != self.memory[-1][-1][0]).any():
+            for i in xrange(2, min(len(self.memory[-1]) + 1, self.dejavu_threshold)):
+                if (digO == self.memory[-1][-i][0]).all():
+                    shift = i
+                    break
+            if shift == 0 or shift * 2 - 1 > len(self.memory[-1]):
+                return False
+            for i in xrange(shift + 1, shift * 2):
+                if (self.memory[-1][-i+shift][0] != self.memory[-1][-i][0]).any():
+                    return False
+            return True
+        else:
+            return False
     
     def act(self, observation):
-        action = numpy.random.choice(self.number_of_actions)
-        
-        return action
+        digO = tuple(map(tuple, observation[0,:,:]))
+        if digO not in self.table or self.find_cycle(digO):
+                return numpy.random.choice(self.number_of_actions)
+        return numpy.argmax(self.table[digO])
